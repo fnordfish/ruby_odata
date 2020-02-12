@@ -2,6 +2,9 @@ module OData
 # The main service class, also known as a *Context*
 class Service
   attr_reader :classes, :class_metadata, :options, :collections, :edmx, :function_imports, :response
+
+  attr_reader :next_uri
+
   # Creates a new instance of the Service class
   #
   # @param [String] service_uri the root URI of the OData service
