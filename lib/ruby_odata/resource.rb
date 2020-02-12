@@ -7,10 +7,13 @@ module OData
       @block = block
       @options = options.is_a?(Hash) ? options : { user: options, password: backwards_compatibility }
 
+      faraday_adapter         = @options.delete(:faraday_adapter) || :net_http
+      faraday_adapter_options = @options.delete(:faraday_adapter_options) || {}
+
       @conn = Faraday.new(url: url, ssl: { verify: verify_ssl }) do |faraday|
         faraday.use      :gzip
         faraday.response :raise_error
-        faraday.adapter  :excon
+        faraday.adapter  faraday_adapter, faraday_adapter_options
 
         faraday.options.timeout      = timeout if timeout
         faraday.options.open_timeout = open_timeout if open_timeout
