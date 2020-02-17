@@ -1,3 +1,5 @@
+require_relative "version"
+
 module OData
   class Resource
     attr_reader :url, :options
