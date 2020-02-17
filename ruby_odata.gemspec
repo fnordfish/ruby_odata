@@ -19,8 +19,6 @@ Gem::Specification.new do |s|
   s.add_dependency("i18n", ">= 0.7.0")
   s.add_dependency("activesupport", ">= 3.0.0")
 
-  s.add_dependency("excon", ">= 0.54")
-  s.add_dependency("faraday_middleware", "~> 1.0.0")
   s.add_dependency("faraday", "~> 1.0.0")
 
   s.add_dependency("nokogiri", ">= 1.4.2")

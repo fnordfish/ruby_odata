@@ -1,32 +1,37 @@
 module OData
   class Resource
-    attr_reader :url, :options, :block
+    attr_reader :url, :options
 
-    def initialize(url, options={}, backwards_compatibility=nil, &block)
+    def initialize(url, options={}, &block)
       @url = url
       @block = block
-      @options = options.is_a?(Hash) ? options : { user: options, password: backwards_compatibility }
 
-      faraday_adapter         = @options.delete(:faraday_adapter) || :net_http
-      faraday_adapter_options = @options.delete(:faraday_adapter_options) || {}
+      faraday_adapter         = options.fetch(:faraday_adapter, :net_http)
+      faraday_adapter_options = options.fetch(:faraday_adapter_options, {})
+      user                    = options[:user]
+      password                = options[:password]
+      timeout                 = options[:timeout]
+      open_timeout            = options[:open_timeout]
 
-      @conn = Faraday.new(url: url, ssl: { verify: verify_ssl }) do |faraday|
-        faraday.use      :gzip
+      @conn = Faraday.new(url: url, ssl: { verify: options[:verify_ssl] }) do |faraday|
         faraday.response :raise_error
         faraday.adapter  faraday_adapter, faraday_adapter_options
 
         faraday.options.timeout      = timeout if timeout
         faraday.options.open_timeout = open_timeout if open_timeout
 
-        faraday.headers = (faraday.headers || {}).merge(@options[:headers] || {})
-        faraday.headers = (faraday.headers).merge({
-          :accept => '*/*; q=0.5, application/xml',
-        })
+        faraday.headers = (faraday.headers || {})
+          .merge!(options[:headers] || {})
+          .merge!(
+            :accept => '*/*; q=0.5, application/xml'
+          )
 
-        faraday.basic_auth user, password if user# this adds to headers so must be behind
+        faraday.basic_auth user, password if password # this adds to headers so must be behind
+
+        yield(faraday) if block
       end
 
-      @conn.headers[:user_agent] = 'Ruby'
+      @conn.headers[:user_agent] = options.fetch(:user_agent) { "Ruby::OData/#{OData::VERSION}" }
     end
 
     def get(additional_headers={})
@@ -78,42 +83,22 @@ module OData
       url
     end
 
-    def user
-      options[:user]
-    end
-
-    def password
-      options[:password]
-    end
-
-    def verify_ssl
-      options[:verify_ssl]
-    end
-
     def headers
       @conn.headers || {}
-    end
-
-    def timeout
-      options[:timeout]
-    end
-
-    def open_timeout
-      options[:open_timeout]
     end
 
     # Construct a subresource, preserving authentication.
     #
     # Example:
     #
-    #   site = RestClient::Resource.new('http://example.com', 'adam', 'mypasswd')
+    #   site = RestClient::Resource.new('http://example.com', user: 'adam', pasword: 'mypasswd')
     #   site['posts/1/comments'].post 'Good article.', :content_type => 'text/plain'
     #
     # This is especially useful if you wish to define your site in one place and
     # call it in multiple locations:
     #
     #   def orders
-    #     RestClient::Resource.new('http://example.com/orders', 'admin', 'mypasswd')
+    #     RestClient::Resource.new('http://example.com/orders', user: 'admin', password: 'mypasswd')
     #   end
     #
     #   orders.get                     # GET http://example.com/orders
@@ -129,22 +114,11 @@ module OData
     #   comments.post 'Hello', :content_type => 'text/plain'
     #
     def [](suburl, &new_block)
-      case
-        when block_given? then self.class.new(concat_urls(url, suburl), options, &new_block)
-        when block        then self.class.new(concat_urls(url, suburl), options, &block)
-      else
-        self.class.new(concat_urls(url, suburl), options)
-      end
+      self.class.new(concat_urls(url, suburl), options, &(@block || new_block))
     end
 
     def concat_urls(url, suburl) # :nodoc:
-      url = url.to_s
-      suburl = suburl.to_s
-      if url.slice(-1, 1) == '/' or suburl.slice(0, 1) == '/'
-        url + suburl
-      else
-        "#{url}/#{suburl}"
-      end
+      File.join(url.to_s, suburl.to_s)
     end
 
     def prepare_payload payload

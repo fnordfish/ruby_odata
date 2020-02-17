@@ -1,3 +1,5 @@
+require 'openssl'
+
 module OData
 # The main service class, also known as a *Context*
 class Service
