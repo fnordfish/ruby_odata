@@ -13,8 +13,6 @@ Gem::Specification.new do |s|
   s.description = %q{An OData Client Library for Ruby.  Use this to interact with OData services}
   s.license     = "MIT"
 
-  s.rubyforge_project = "ruby-odata"
-
   s.required_ruby_version = '>= 1.9.3'
 
   s.add_dependency("addressable", ">= 2.3.4")
