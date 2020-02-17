@@ -5,7 +5,7 @@ module OData
 class Service
   attr_reader :classes, :class_metadata, :options, :collections, :edmx, :function_imports, :response
 
-  attr_reader :next_uri
+  attr_accessor :next_uri
 
   # Creates a new instance of the Service class
   #
