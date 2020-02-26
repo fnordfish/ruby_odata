@@ -185,11 +185,21 @@ class Service
     if args.empty?
       #nothing to add
     elsif args.size == 1
-      if args.first.to_s =~ /\d+/
+      id = args.first
+      if id.is_a?(Hash)
+        id_metadata = find_key_metadata(name.to_s)
+        ids = id.map { |k, v|
+          key = k.to_s
+          raise ArgumentError, "Unknown id part '#{key}' for entity '#{name}'" unless id_metadata[key]
+
+          "#{key}=#{build_id(v, id_metadata[key])}"
+        }
+        root << "(#{ids.join(",")})"
+      elsif id.to_s =~ /\d+/
         id_metadata = find_id_metadata(name.to_s)
-        root << build_id_path(args.first, id_metadata)
+        root << "(#{build_id_path(id, id_metadata)})"
       else
-        root << "(#{args.first})"
+        root << "(#{id})"
       end
     else
       root << "(#{args.join(',')})"
@@ -204,19 +214,28 @@ class Service
   def find_id_metadata(collection_name)
     collection_data = @collections.fetch(collection_name)
     class_metadata = @class_metadata.fetch(collection_data[:type].to_s)
-    key = class_metadata.select{|k,h| h.is_key }.collect{|k,h| h.name }[0]
+    key = class_metadata.select { |k,h| h.is_key }.collect { |k,h| h.name }[0]
     class_metadata[key]
+  end
+
+  def find_key_metadata(collection_name)
+    collection_data = @collections.fetch(collection_name)
+    class_metadata = @class_metadata.fetch(collection_data[:type].to_s)
+    class_metadata.select { |k, h| h.is_key }
   end
 
   # Builds the ID expression of a given id for query
   #
   # @param [Object] id_value the actual value to be used
   # @param [PropertyMetadata] id_metadata the property metadata object for the id
-  def build_id_path(id_value, id_metadata)
-    if id_metadata.type == "Edm.Int64"
-      "(#{id_value}L)"
+  def build_id(id_value, id_metadata)
+    case id_metadata.type
+    when "Edm.Int64"
+      "#{id_value}L"
+    when "Edm.String"
+      "'#{id_value}'"
     else
-      "(#{id_value})"
+      id_value.to_s
     end
   end
 
