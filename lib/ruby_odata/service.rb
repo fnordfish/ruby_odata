@@ -197,7 +197,7 @@ class Service
         root << "(#{ids.join(",")})"
       elsif id.to_s =~ /\d+/
         id_metadata = find_id_metadata(name.to_s)
-        root << "(#{build_id_path(id, id_metadata)})"
+        root << "(#{build_id(id, id_metadata)})"
       else
         root << "(#{id})"
       end
