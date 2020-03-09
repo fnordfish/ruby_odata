@@ -7,6 +7,13 @@ class Service
 
   attr_accessor :next_uri
 
+  ADD_TO_REGEXP = /^AddTo(.*)/.freeze
+  EDM_TYPE_EGEXP = /^Edm/.freeze
+  EDM_INT_TYPE_REGEXP = /^Edm.Int/.freeze
+  EDM_DECIMAL_TYPE_REGEXP = /Edm.Decimal/.freeze
+  EDM_DATETIME_TYPE_REGEXP = /Edm.DateTime/.freeze
+  EDM_STRING_TYPE_REGEXP = /Edm.String/.freeze
+
   # Creates a new instance of the Service class
   #
   # @param [String] service_uri the root URI of the OData service
@@ -32,7 +39,7 @@ class Service
       @query = build_collection_query_object(name,@additional_params, *args)
       return @query
     # Adds
-    elsif name.to_s =~ /^AddTo(.*)/
+    elsif name.to_s =~ ADD_TO_REGEXP
       type = $1
       if @collections.include?(type)
         @save_operations << Operation.new("Add", $1, args[0])
@@ -115,7 +122,7 @@ class Service
     if @collections.include?(method.to_s)
       return true
     # Adds
-    elsif method.to_s =~ /^AddTo(.*)/
+    elsif method.to_s =~ ADD_TO_REGEXP
       type = $1
       if @collections.include?(type)
         return true
@@ -175,6 +182,8 @@ class Service
 
   private
 
+  NUMERIC_REGEXP = /\d+/.freeze
+
   # Constructs a QueryBuilder instance for a collection using the arguments provided.
   #
   # @param [String] name the name of the collection
@@ -195,7 +204,7 @@ class Service
           "#{key}=#{build_id(v, id_metadata[key])}"
         }
         root << "(#{ids.join(",")})"
-      elsif id.to_s =~ /\d+/
+      elsif id.is_a?(Numeric) || id.to_s =~ NUMERIC_REGEXP
         id_metadata = find_id_metadata(name.to_s)
         root << "(#{build_id(id, id_metadata)})"
       else
@@ -269,7 +278,8 @@ class Service
 
     # Get the edm namespace from the edmx
     edm_ns = @edmx.xpath("edmx:Edmx/edmx:DataServices/*", @namespaces).first.namespaces['xmlns'].to_s
-    @ds_namespaces.merge! "edm" => edm_ns
+    @ds_namespaces["edm"] = edm_ns
+    @ds_namespaces
   end
 
   # Gets ssl certificate verification mode, or defaults to verify_peer
@@ -314,6 +324,9 @@ class Service
     build_function_imports
   end
 
+  RETURN_TYPE_REGEXP = /\((.*)\)/.freeze
+  COLLECTION_REGEXP = /^Collection/.freeze
+
   # Parses the function imports and fills the @function_imports collection
   def build_function_imports
     # Fill in the function imports
@@ -334,8 +347,8 @@ class Service
       return_type = f["ReturnType"]
       inner_return_type = nil
       unless return_type.nil?
-        return_type = (return_type =~ /^Collection/) ? Array : convert_to_local_type(return_type)
-        if f["ReturnType"] =~ /\((.*)\)/
+        return_type = (return_type =~ COLLECTION_REGEXP) ? Array : convert_to_local_type(return_type)
+        if f["ReturnType"] =~ RETURN_TYPE_REGEXP
           inner_return_type = convert_to_local_type($~[1])
         end
       end
@@ -357,7 +370,7 @@ class Service
 
   # Converts the EDMX model type to the local model type
   def convert_to_local_type(edmx_type)
-    return edm_to_ruby_type(edmx_type) if edmx_type =~ /^Edm/
+    return edm_to_ruby_type(edmx_type) if edmx_type =~ EDM_TYPE_EGEXP
     klass_name = qualify_class_name(edmx_type.split('.').last)
     klass_name.camelize.constantize
   end
@@ -721,14 +734,16 @@ class Service
     return content
   end
 
+  COMPLEX_COLLECTION_TYPE_REGEXP = /\(([^)]*)\)/m.freeze
   # Complex Types
   def complex_type_to_class(complex_type_xml)
+    is_collection = false
     type = Helpers.get_namespaced_attribute(complex_type_xml, 'type', 'm')
 
-    is_collection = false
     # Extract the class name in case this is a Collection
-    if type =~ /\(([^)]*)\)/m
-    	type = $~[1]
+    collection_type = type[COMPLEX_COLLECTION_TYPE_REGEXP, 1]
+    if complext_type
+    	type = collection_type
       is_collection = true
       collection = []
     end
@@ -739,7 +754,7 @@ class Service
       # extract the elements from the collection
       elements = complex_type_xml.xpath(".//d:element", @namespaces)
       elements.each do |e|
-        if type.match(/^Edm/)
+        if type.match(EDM_TYPE_EGEXP)
           collection << parse_value(e.content, type)
         else
           element = @classes[klass_name].new
@@ -766,10 +781,12 @@ class Service
 
   # Field Converters
 
+  TZ_DATE_REGEXP = /Z|([+|-]\d{2}:\d{2})$/.freeze
+
   # Handles parsing datetimes from a string
   def parse_date(sdate)
     # Assume this is UTC if no timezone is specified
-    sdate = sdate + "Z" unless sdate.match(/Z|([+|-]\d{2}:\d{2})$/)
+    sdate = sdate + "Z" unless sdate.match(TZ_DATE_REGEXP)
 
     # This is to handle older versions of Ruby (e.g. ruby 1.8.7 (2010-12-23 patchlevel 330) [i386-mingw32])
     # See http://makandra.com/notes/1017-maximum-representable-value-for-a-ruby-time-object
@@ -788,7 +805,7 @@ class Service
     property_type = Helpers.get_namespaced_attribute(property_xml, 'type', 'm')
     property_null = Helpers.get_namespaced_attribute(property_xml, 'null', 'm')
 
-    if property_type.nil? || (property_type && property_type.match(/^Edm/))
+    if property_type.nil? || (property_type && property_type.match(EDM_TYPE_EGEXP))
       return parse_value(property_xml.content, property_type, property_null)
     end
 
@@ -803,14 +820,14 @@ class Service
     return content if property_type.nil?
 
     # Handle integers
-    return content.to_i if property_type.match(/^Edm.Int/)
+    return content.to_i if property_type.match(EDM_INT_TYPE_REGEXP)
 
     # Handle decimals
-    return content.to_d if property_type.match(/Edm.Decimal/)
+    return content.to_d if property_type.match(EDM_DECIMAL_TYPE_REGEXP)
 
     # Handle DateTimes
     # return Time.parse(property_xml.content) if property_type.match(/Edm.DateTime/)
-    return parse_date(content) if property_type.match(/Edm.DateTime/)
+    return parse_date(content) if property_type.match(EDM_DATETIME_TYPE_REGEXP)
 
     # If we can't parse the value, just return the element's content
     content
@@ -826,10 +843,10 @@ class Service
 
   # Converts an edm type (string) to a ruby type
   def edm_to_ruby_type(edm_type)
-    return String if edm_type =~ /Edm.String/
-    return Fixnum if edm_type =~ /^Edm.Int/
-    return Float if edm_type =~ /Edm.Decimal/
-    return Time if edm_type =~ /Edm.DateTime/
+    return String if edm_type =~ EDM_STRING_TYPE_REGEXP
+    return Fixnum if edm_type =~ EDM_INT_TYPE_REGEXP
+    return Float if edm_type =~ EDM_DECIMAL_TYPE_REGEXP
+    return Time if edm_type =~ EDM_DATETIME_TYPE_REGEXP
     return String
   end
 
