@@ -9,6 +9,7 @@ module OData
     # @param [Service] context the service context that this entity belongs to
     # @param [String, nil] namespace optional namespace to create the classes in
     def initialize(klass_name, methods, nav_props, context, namespace = nil)
+      @klass = nil
       @klass_name = klass_name.camelcase
       @methods = methods
       @nav_props = nav_props
