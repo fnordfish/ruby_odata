@@ -132,13 +132,13 @@ class Service
 
   # Retrieves the next resultset of a partial result (if any). Does not honor the `:eager_partial` option.
   def next
-    return if not partial?
+    return unless @next_uri
     handle_partial
   end
 
   # Does the most recent collection returned represent a partial collection? Will aways be false if a query hasn't executed, even if the query would have a partial
   def partial?
-    @has_partial
+    !@next_uri.nil?
   end
 
   # Lazy loads a navigation property on a model
@@ -255,7 +255,6 @@ class Service
     @collections = {}
     @function_imports = {}
     @save_operations = []
-    @has_partial = false
     @next_uri = nil
   end
 
@@ -523,11 +522,12 @@ class Service
   # Tests for and extracts the next href of a partial
   def extract_partial(doc)
     next_links = doc.xpath('//atom:link[@rel="next"]', @ds_namespaces)
-    @has_partial = next_links.any?
-    if @has_partial
+    if next_links.any?
       uri = Addressable::URI.parse(next_links[0]['href'])
       uri.query_values = uri.query_values.merge @additional_params unless @additional_params.empty?
-      @next_uri = uri.to_s
+      self.next_uri = uri.to_s
+    else
+      self.next_uri = nil
     end
   end
 
